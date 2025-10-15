@@ -50,10 +50,7 @@ func DecodeUint(buf []byte) (uint, []byte, error) {
 	if len(buf) == 0 {
 		return 0, nil, ErrEmpty
 	}
-	n := strconv.IntSize / 5
-	if n > len(buf) {
-		n = len(buf)
-	}
+	n := min(strconv.IntSize/5, len(buf))
 	var u, shift uint
 	for i := range n {
 		switch b := buf[i]; {
