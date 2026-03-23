@@ -350,3 +350,112 @@ func FuzzDecodeCoords(f *testing.F) {
 		_, _, _ = polyline.DecodeCoords(data)
 	})
 }
+
+func TestCoord2D(t *testing.T) {
+	for i, tc := range []struct {
+		coords []polyline.Coord2D
+		str    string
+	}{
+		{
+			coords: []polyline.Coord2D{{38.5, -120.2}},
+			str:    "_p~iF~ps|U",
+		},
+		{
+			coords: []polyline.Coord2D{{38.5, -120.2}, {40.7, -120.95}, {43.252, -126.453}},
+			str:    "_p~iF~ps|U_ulLnnqC_mqNvxq`@",
+		},
+		{
+			coords: []polyline.Coord2D{{0, 0}},
+			str:    "??",
+		},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			// Test encoding
+			got := polyline.EncodeCoords2D(tc.coords)
+			assert.Equal(t, []byte(tc.str), got)
+
+			// Test decoding
+			coords, remaining, err := polyline.DecodeCoords2D([]byte(tc.str))
+			assert.NoError(t, err)
+			assert.Equal(t, 0, len(remaining))
+			assert.Equal(t, len(tc.coords), len(coords))
+			for j := range coords {
+				assert.Equal(t, tc.coords[j][0], coords[j][0], "lat mismatch at index %d", j)
+				assert.Equal(t, tc.coords[j][1], coords[j][1], "lon mismatch at index %d", j)
+			}
+		})
+	}
+}
+
+func TestCoord2DCodec(t *testing.T) {
+	c := polyline.Codec{Dim: 2, Scale: 1e5}
+	coords := []polyline.Coord2D{{38.5, -120.2}, {40.7, -120.95}}
+
+	// Encode
+	encoded := c.EncodeCoords2D(nil, coords)
+	assert.Equal(t, len(encoded) > 0, true)
+
+	// Decode
+	decoded, remaining, err := c.DecodeCoords2D(encoded)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(remaining))
+	assert.Equal(t, len(coords), len(decoded))
+
+	// Verify values
+	for i := range coords {
+		assert.Equal(t, coords[i][0], decoded[i][0])
+		assert.Equal(t, coords[i][1], decoded[i][1])
+	}
+}
+
+func TestCoord2DEmpty(t *testing.T) {
+	coords, remaining, err := polyline.DecodeCoords2D(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(coords))
+	assert.Equal(t, 0, len(remaining))
+
+	encoded := polyline.EncodeCoords2D(nil)
+	assert.Equal(t, 0, len(encoded))
+}
+
+func TestCoord2DWrongDimension(t *testing.T) {
+	c := polyline.Codec{Dim: 3, Scale: 1e5}
+	_, _, err := c.DecodeCoords2D([]byte("??"))
+	assert.Equal(t, polyline.ErrDimensionalMismatch, err)
+}
+
+func TestCoord2DVsSlice(t *testing.T) {
+	// Test that Coord2D and [][]float64 produce identical results
+	testData := [][]float64{
+		{38.5, -120.2},
+		{40.7, -120.95},
+		{43.252, -126.453},
+		{41.139, -104.844},
+	}
+
+	// Convert to Coord2D
+	coordsArray := make([]polyline.Coord2D, len(testData))
+	for i, coord := range testData {
+		coordsArray[i] = polyline.Coord2D{coord[0], coord[1]}
+	}
+
+	// Encode both
+	encodedSlice := polyline.EncodeCoords(testData)
+	encodedArray := polyline.EncodeCoords2D(coordsArray)
+
+	// Should produce identical output
+	assert.Equal(t, encodedSlice, encodedArray)
+
+	// Decode both
+	decodedSlice, _, err := polyline.DecodeCoords(encodedSlice)
+	assert.NoError(t, err)
+	decodedArray, _, err := polyline.DecodeCoords2D(encodedArray)
+	assert.NoError(t, err)
+
+	// Should have same values
+	assert.Equal(t, len(decodedSlice), len(decodedArray))
+	for i := range decodedSlice {
+		assert.Equal(t, decodedSlice[i][0], decodedArray[i][0])
+		assert.Equal(t, decodedSlice[i][1], decodedArray[i][1])
+	}
+}
